@@ -100,24 +100,36 @@ btnMint.addEventListener('click', async () => {
   
   let data;
   try {
-    const fetchP = fetch('https://text.pollinations.ai/', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], model: 'openai', jsonMode: true })
-    });
+    const fetchP = fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}`);
     const timeout = new Promise((_, r) => setTimeout(()=>r(new Error("Timeout")), 15000));
     const res = await Promise.race([fetchP, timeout]);
     let text = await res.text();
+    console.log("Raw API Response:", text);
+    
+    // Clean markdown if present
     text = text.replace(/```[a-z]*\n/gi, '').replace(/```/g, '').trim();
     
-    let parsed = JSON.parse(text);
-    if(parsed.choices && parsed.choices[0]?.message?.content) {
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch(err) {
+      console.warn("Direct parse failed, attempting deepseek extraction:", err);
+      // It might not be json at all, but let's try
+    }
+    
+    if(parsed && parsed.choices && parsed.choices[0]?.message?.content) {
       let t = parsed.choices[0].message.content.replace(/```[a-z]*\n/gi, '').replace(/```/g, '').trim();
       data = JSON.parse(t);
-    } else { data = parsed; }
+    } else if(parsed) {
+      data = parsed;
+    } else {
+      throw new Error("Could not parse JSON from response");
+    }
     
-    if(!data.currencyName || !data.borderStyle) throw new Error("Invalid format");
+    if(!data.currencyName || !data.borderStyle) throw new Error("Invalid format: missing required fields");
   } catch(e) {
-    console.warn(e); data = fallbackJSON;
+    console.warn("API Error, using fallback:", e);
+    data = fallbackJSON;
   }
   
   currentNoteData = data;
